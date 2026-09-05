@@ -24,7 +24,7 @@ services:
     stop_grace_period: 1m
 
   redis:
-    image: redis:7.0-alpine
+    image: redis:8-alpine
     container_name: WeKnora-redis-dev
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -241,6 +241,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile.docreader
     image: wechatopenai/weknora-docreader:${WEKNORA_VERSION:-latest}
+    # always build from fork source; default pull_policy would pull the
+    # upstream image from Docker Hub when the tag is missing locally
+    pull_policy: build
     container_name: WeKnora-docreader-dev
     ports:
       - "${DOCREADER_PORT:-50051}:50051"

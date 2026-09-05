@@ -1,0 +1,50 @@
+# local omlx (OpenAI-compatible) models.
+# base_url uses host.docker.internal because the app runs inside docker
+# while omlx listens on the host. api_key comes from .env (OMLX_API_KEY).
+# requires SSRF_WHITELIST=host.docker.internal in .env.
+
+builtin_models:
+  - id: builtin-omlx-chat
+    name: Qwen3.6-35B-A3B-oQ4e-mtp
+    type: KnowledgeQA
+    source: remote
+    is_default: true
+    description: local omlx chat model (MoE, 262k ctx)
+    parameters:
+      base_url: http://host.docker.internal:8200/v1
+      api_key: ${OMLX_API_KEY}
+      provider: openai
+
+  - id: builtin-omlx-chat-27b
+    name: Qwen3.8-27B-oQ4e-mtp
+    type: KnowledgeQA
+    source: remote
+    description: local omlx chat model (27B, 262k ctx)
+    parameters:
+      base_url: http://host.docker.internal:8200/v1
+      api_key: ${OMLX_API_KEY}
+      provider: openai
+
+  - id: builtin-omlx-embedding
+    name: bge-m3-mlx-8bit
+    type: Embedding
+    source: remote
+    is_default: true
+    description: local omlx embedding (1024-dim, 8k ctx)
+    parameters:
+      base_url: http://host.docker.internal:8200/v1
+      api_key: ${OMLX_API_KEY}
+      provider: openai
+      embedding_parameters:
+        dimension: 1024
+        truncate_prompt_tokens: 0
+
+  - id: builtin-omlx-rerank
+    name: Qwen3-Reranker-0.6B-4bit
+    type: Rerank
+    source: remote
+    description: local omlx reranker via POST {base_url}/rerank
+    parameters:
+      base_url: http://host.docker.internal:8200/v1
+      api_key: ${OMLX_API_KEY}
+      provider: generic
