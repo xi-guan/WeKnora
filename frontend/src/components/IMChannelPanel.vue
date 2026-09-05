@@ -552,7 +552,7 @@
               <!-- QR code binding flow -->
               <div v-else class="wechat-qr-section">
                 <!-- Initial state: show bind button -->
-                <div v-if="!wechatQRImgUrl" class="wechat-bind-action">
+                <div v-if="!wechatQRContent" class="wechat-bind-action">
                   <t-button theme="default" variant="outline" :loading="wechatLoading" @click="startWeChatBinding">
                     <template #icon><t-icon name="scan" /></template>
                     {{ $t('agentEditor.im.wechatScanBind') }}
@@ -562,7 +562,8 @@
                 <!-- QR code displayed -->
                 <div v-else class="wechat-qr-display">
                   <div class="qr-container">
-                    <img :src="wechatQRImgUrl" alt="WeChat QR Code" class="qr-image" />
+                    <!-- rendered locally: the payload is a binding credential, never send it to a third-party QR service -->
+                    <t-qrcode :value="wechatQRContent" :size="176" borderless color="#000000" bg-color="#ffffff" />
                     <div v-if="wechatQRStatus === 'expired'" class="qr-expired-overlay" @click="startWeChatBinding">
                       <t-icon name="refresh" class="refresh-icon" />
                       <span>{{ $t('agentEditor.im.wechatQRExpired') }}</span>
@@ -731,7 +732,6 @@ const knowledgeBases = ref<{ id: string; name: string }[]>([]);
 
 // WeChat QR code binding state
 const wechatQRContent = ref('');  // raw text to encode as QR code
-const wechatQRImgUrl = ref('');   // generated QR image URL
 const wechatQRCode = ref('');     // opaque token for polling status
 const wechatQRStatus = ref<string>('');
 const wechatLoading = ref(false);
@@ -830,7 +830,6 @@ function onPlatformChange(val: string | number | boolean) {
   formData.value.credentials = defaultCredentials();
   stopWeChatPolling();
   wechatQRContent.value = '';
-  wechatQRImgUrl.value = '';
   wechatQRCode.value = '';
   wechatQRStatus.value = '';
   // WeChat uses fixed mode/output
@@ -869,7 +868,6 @@ async function startWeChatBinding() {
   stopWeChatPolling();
   wechatLoading.value = true;
   wechatQRContent.value = '';
-  wechatQRImgUrl.value = '';
   wechatQRStatus.value = '';
 
   try {
@@ -878,9 +876,6 @@ async function startWeChatBinding() {
     wechatQRContent.value = res.data.qrcode_url;
     wechatQRCode.value = res.data.qrcode;
     wechatQRStatus.value = 'wait';
-
-    // Generate QR code image via public API (no extra npm dependency needed)
-    wechatQRImgUrl.value = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(res.data.qrcode_url)}`;
 
     // Start long-polling for scan status
     startStatusPolling();
@@ -911,7 +906,6 @@ async function pollOnce() {
       };
       stopWeChatPolling();
       wechatQRContent.value = '';
-      wechatQRImgUrl.value = '';
       MessagePlugin.success(t('agentEditor.im.wechatBindSuccess'));
       return;
     }
@@ -1018,7 +1012,6 @@ function resetForm() {
   channelNameTouched.value = false;
   stopWeChatPolling();
   wechatQRContent.value = '';
-  wechatQRImgUrl.value = '';
   wechatQRCode.value = '';
   wechatQRStatus.value = '';
   formData.value = {
@@ -1441,18 +1434,15 @@ onUnmounted(() => {
   position: relative;
   width: 200px;
   height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-md);
   overflow: hidden;
   // QR code images are always black-on-white; force white background
   // so the code remains scannable in dark mode.
   background: #fff;
-
-  .qr-image {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
 }
 
 .qr-expired-overlay {
