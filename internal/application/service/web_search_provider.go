@@ -179,17 +179,9 @@ func validateProviderParameters(provider types.WebSearchProviderType, params typ
 		if params.APIKey == "" {
 			return fmt.Errorf("API key is required for Ollama provider")
 		}
-	case types.WebSearchProviderTypeBaidu:
-		if params.APIKey == "" {
-			return fmt.Errorf("API key is required for Baidu provider")
-		}
 	case types.WebSearchProviderTypeExa:
 		if params.APIKey == "" {
 			return fmt.Errorf("API key is required for Exa provider")
-		}
-	case types.WebSearchProviderTypeZhipu:
-		if err := infra_web_search.ValidateZhipuParameters(params); err != nil {
-			return err
 		}
 	case types.WebSearchProviderTypeMetaso:
 		if err := infra_web_search.ValidateMetasoParameters(params); err != nil {

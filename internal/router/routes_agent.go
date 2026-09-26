@@ -315,13 +315,6 @@ func RegisterIMChannelRoutes(r *gin.RouterGroup, imHandler *handler.IMHandler, g
 		channels.POST("/:id/toggle", g.Admin(), imHandler.ToggleIMChannel)
 	}
 
-	// WeChat QR code login (requires authentication) — Admin+: a successful
-	// scan binds a personal WeChat account to the tenant.
-	wechatGroup := g.apiKeyGroup(r.Group("/wechat"), apiKeyManageChannels(apiKeyFullAccess()))
-	{
-		wechatGroup.POST("/qrcode", g.Admin(), imHandler.WeChatGetQRCode)
-		wechatGroup.POST("/qrcode/status", g.Admin(), imHandler.WeChatPollQRCodeStatus)
-	}
 }
 
 // embedChannelIDFromPath extracts the channel id from an /embed/:channelID path.

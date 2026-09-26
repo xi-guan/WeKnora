@@ -38,7 +38,6 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/agent/approval"
 	"github.com/Tencent/WeKnora/internal/application/repository"
-	dorisRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/doris"
 	elasticsearchRepoV7 "github.com/Tencent/WeKnora/internal/application/repository/retriever/elasticsearch/v7"
 	elasticsearchRepoV8 "github.com/Tencent/WeKnora/internal/application/repository/retriever/elasticsearch/v8"
 	milvusRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/milvus"
@@ -47,7 +46,6 @@ import (
 	postgresRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/postgres"
 	qdrantRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/qdrant"
 	sqliteRetrieverRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/sqlite"
-	tencentVectorDBRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/tencentvectordb"
 	weaviateRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/weaviate"
 	"github.com/Tencent/WeKnora/internal/application/service"
 	chatpipeline "github.com/Tencent/WeKnora/internal/application/service/chat_pipeline"
@@ -60,28 +58,20 @@ import (
 	"github.com/Tencent/WeKnora/internal/database"
 	"github.com/Tencent/WeKnora/internal/datasource"
 	confluenceConnector "github.com/Tencent/WeKnora/internal/datasource/connector/confluence"
-	dingtalkConnector "github.com/Tencent/WeKnora/internal/datasource/connector/dingtalk"
 	"github.com/Tencent/WeKnora/internal/datasource/connector/feishu/core"
 	"github.com/Tencent/WeKnora/internal/datasource/connector/feishu/drive"
 	"github.com/Tencent/WeKnora/internal/datasource/connector/feishu/wiki"
 	gitlabConnector "github.com/Tencent/WeKnora/internal/datasource/connector/gitlab"
-	imaConnector "github.com/Tencent/WeKnora/internal/datasource/connector/ima"
 	notionConnector "github.com/Tencent/WeKnora/internal/datasource/connector/notion"
 	rssConnector "github.com/Tencent/WeKnora/internal/datasource/connector/rss"
-	yuqueConnector "github.com/Tencent/WeKnora/internal/datasource/connector/yuque"
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/handler"
 	"github.com/Tencent/WeKnora/internal/handler/session"
 	imPkg "github.com/Tencent/WeKnora/internal/im"
-	"github.com/Tencent/WeKnora/internal/im/dingtalk"
 	"github.com/Tencent/WeKnora/internal/im/feishu"
 	"github.com/Tencent/WeKnora/internal/im/mattermost"
-	"github.com/Tencent/WeKnora/internal/im/qqbot"
 	"github.com/Tencent/WeKnora/internal/im/slack"
 	"github.com/Tencent/WeKnora/internal/im/telegram"
-	"github.com/Tencent/WeKnora/internal/im/wechat"
-	"github.com/Tencent/WeKnora/internal/im/wecom"
-	"github.com/Tencent/WeKnora/internal/im/yunzhijia"
 	"github.com/Tencent/WeKnora/internal/infrastructure/docparser"
 	infra_web_search "github.com/Tencent/WeKnora/internal/infrastructure/web_search"
 	"github.com/Tencent/WeKnora/internal/logger"
@@ -99,7 +89,6 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	secutils "github.com/Tencent/WeKnora/internal/utils"
-	"github.com/tencent/vectordatabase-sdk-go/tcvectordb"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/auth"
 	wgrpc "github.com/weaviate/weaviate-go-client/v5/weaviate/grpc"
@@ -1520,84 +1509,6 @@ func initRetrieveEngineRegistry(
 			}
 		}
 	}
-	if slices.Contains(retrieveDriver, "doris") {
-		dorisAddr := os.Getenv("DORIS_ADDR")
-		if dorisAddr == "" {
-			// docker-compose 默认服务名 + Doris FE MySQL 端口
-			dorisAddr = "doris-fe:9030"
-		}
-		dorisDatabase := os.Getenv("DORIS_DATABASE")
-		if dorisDatabase == "" {
-			dorisDatabase = "weknora"
-		}
-		dorisUsername := os.Getenv("DORIS_USERNAME")
-		if dorisUsername == "" {
-			dorisUsername = "root"
-		}
-		dorisPassword := os.Getenv("DORIS_PASSWORD")
-		dorisHTTPPort := 8030
-		if portStr := os.Getenv("DORIS_HTTP_PORT"); portStr != "" {
-			if port, err := strconv.Atoi(portStr); err == nil {
-				dorisHTTPPort = port
-			}
-		}
-
-		dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=true&loc=Local&interpolateParams=true",
-			dorisUsername, dorisPassword, dorisAddr, dorisDatabase)
-		dorisDB, err := sql.Open("mysql", dsn)
-		if err != nil {
-			log.Errorf("Create doris client failed: %v", err)
-		} else {
-			dorisDB.SetMaxOpenConns(20)
-			dorisDB.SetMaxIdleConns(5)
-			dorisDB.SetConnMaxLifetime(time.Hour)
-
-			httpBase := "http://" + hostFromAddr(dorisAddr) + ":" + strconv.Itoa(dorisHTTPPort)
-			dorisRepository := dorisRepo.NewDorisRetrieveEngineRepository(
-				dorisDB, httpBase, dorisUsername, dorisPassword, dorisDatabase, nil,
-			)
-			if err := registry.Register(
-				retriever.NewKVHybridRetrieveEngine(
-					dorisRepository, types.DorisRetrieverEngineType,
-				),
-			); err != nil {
-				log.Errorf("Register doris retrieve engine failed: %v", err)
-			} else {
-				log.Infof("Register doris retrieve engine success: %s db=%s", dorisAddr, dorisDatabase)
-			}
-		}
-	}
-	if slices.Contains(retrieveDriver, "tencent_vectordb") {
-		addr := os.Getenv("TENCENT_VECTORDB_ADDR")
-		username := os.Getenv("TENCENT_VECTORDB_USERNAME")
-		apiKey := os.Getenv("TENCENT_VECTORDB_API_KEY")
-		if addr == "" || username == "" || apiKey == "" {
-			log.Errorf("Missing Tencent VectorDB configuration")
-		} else {
-			client, err := tcvectordb.NewRpcClient(addr, username, apiKey, &tcvectordb.ClientOption{
-				ReadConsistency: tcvectordb.EventualConsistency,
-				Timeout:         10 * time.Second,
-			})
-			if err != nil {
-				log.Errorf("Create tencent_vectordb client failed: %v", err)
-			} else {
-				tencentRepository := tencentVectorDBRepo.NewTencentVectorDBRetrieveEngineRepository(
-					client,
-					os.Getenv("TENCENT_VECTORDB_DATABASE"),
-					nil,
-				)
-				if err := registry.Register(
-					retriever.NewKVHybridRetrieveEngine(
-						tencentRepository, types.TencentVectorDBRetrieverEngineType,
-					),
-				); err != nil {
-					log.Errorf("Register tencent_vectordb retrieve engine failed: %v", err)
-				} else {
-					log.Infof("Register tencent_vectordb retrieve engine success")
-				}
-			}
-		}
-	}
 	// ─── DB store registration (byStoreID) ───
 	if storeReg, ok := registry.(*retriever.RetrieveEngineRegistry); ok {
 		loadDBStoresIntoRegistry(storeReg, db, cfg, auditSink)
@@ -1812,10 +1723,8 @@ func registerWebSearchProviders(registry *infra_web_search.Registry) {
 	registry.Register("bing", infra_web_search.NewBingProvider)
 	registry.Register("tavily", infra_web_search.NewTavilyProvider)
 	registry.Register("ollama", infra_web_search.NewOllamaProvider)
-	registry.Register("baidu", infra_web_search.NewBaiduProvider)
 	registry.Register("searxng", infra_web_search.NewSearxngProvider)
 	registry.Register("keenable", infra_web_search.NewKeenableProvider)
-	registry.Register("zhipu", infra_web_search.NewZhipuProvider)
 	registry.Register("exa", infra_web_search.NewExaProvider)
 	registry.Register("metaso", infra_web_search.NewMetasoProvider)
 	registry.Register("bocha", infra_web_search.NewBochaProvider)
@@ -1827,17 +1736,11 @@ func registerWebSearchProviders(registry *infra_web_search.Registry) {
 // wires the process-lifetime shutdown hook. Each platform's factory lives in
 // its own subpackage to keep this file focused on wiring.
 func registerIMService(imService *imPkg.Service, cleaner interfaces.ResourceCleaner) {
-	imService.RegisterAdapterFactory("wecom", wecom.NewFactory())
-	imService.RegisterAdapterFactory("feishu", feishu.NewFactory(feishu.RegionFeishu))
 	// Lark is Feishu's international cloud: same adapter, different host/tenant.
 	imService.RegisterAdapterFactory("lark", feishu.NewFactory(feishu.RegionLark))
 	imService.RegisterAdapterFactory("slack", slack.NewFactory())
 	imService.RegisterAdapterFactory("telegram", telegram.NewFactory())
-	imService.RegisterAdapterFactory("dingtalk", dingtalk.NewFactory())
 	imService.RegisterAdapterFactory("mattermost", mattermost.NewFactory())
-	imService.RegisterAdapterFactory("wechat", wechat.NewFactory())
-	imService.RegisterAdapterFactory("qqbot", qqbot.NewFactory())
-	imService.RegisterAdapterFactory("yunzhijia", yunzhijia.NewFactory())
 
 	// Load and start all enabled channels from database
 	if err := imService.LoadAndStartChannels(); err != nil {
@@ -1857,19 +1760,13 @@ func initConnectorRegistry() (*datasource.ConnectorRegistry, error) {
 	registry := datasource.NewConnectorRegistry()
 
 	var errs error
-	if err := registry.Register(wiki.NewConnector(core.RegionFeishu)); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register feishu connector: %w", err))
-	}
 	// Lark is Feishu's international cloud: same connector, different host/tenant.
 	if err := registry.Register(wiki.NewConnector(core.RegionLark)); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("register lark connector: %w", err))
 	}
-	// Feishu/Lark Drive (云盘) mode: different connector type so the registry
+	// Lark Drive (云盘) mode: different connector type so the registry
 	// dispatches to the Drive connector. Shares core.Client/Region/export logic
 	// with the wiki connector. See 飞书云盘数据源设计.md / ADR-0001.
-	if err := registry.Register(drive.NewDriveConnector(core.RegionFeishuDrive)); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register feishu_drive connector: %w", err))
-	}
 	if err := registry.Register(drive.NewDriveConnector(core.RegionLarkDrive)); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("register lark_drive connector: %w", err))
 	}
@@ -1878,15 +1775,6 @@ func initConnectorRegistry() (*datasource.ConnectorRegistry, error) {
 	}
 	if err := registry.Register(confluenceConnector.NewConnector()); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("register confluence connector: %w", err))
-	}
-	if err := registry.Register(yuqueConnector.NewConnector()); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register yuque connector: %w", err))
-	}
-	if err := registry.Register(dingtalkConnector.NewConnector()); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register dingtalk connector: %w", err))
-	}
-	if err := registry.Register(imaConnector.NewConnector()); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("register ima connector: %w", err))
 	}
 	if err := registry.Register(rssConnector.NewConnector()); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("register rss connector: %w", err))
