@@ -83,18 +83,6 @@ func upstream(t *testing.T) (string, *form, *atomic.Int32) {
 // gpt-4o-transcribe rejects ("the only supported format is json") and which
 // vox-box's FunASR backend answers with an undecodable bare string.
 func TestTranscriptionWireFormatPerVendor(t *testing.T) {
-	chatAudio := func(model string) map[string]any {
-		return map[string]any{
-			"model": model,
-			"messages": []any{map[string]any{
-				"role": "user",
-				"content": []any{map[string]any{
-					"type":        "input_audio",
-					"input_audio": map[string]any{"data": "data:audio/wav;base64,UklGRg=="},
-				}},
-			}},
-		}
-	}
 	cases := []struct {
 		name, provider, model, base string
 		wantPath                    string
@@ -119,11 +107,6 @@ func TestTranscriptionWireFormatPerVendor(t *testing.T) {
 			wantFields: map[string]string{"model": "gpt-5-transcribe"},
 		},
 		{
-			name: "siliconflow documents file and model only", provider: "siliconflow",
-			model: "FunAudioLLM/SenseVoiceSmall", base: "/v1", wantPath: "/v1/audio/transcriptions",
-			wantFields: map[string]string{"model": "FunAudioLLM/SenseVoiceSmall"},
-		},
-		{
 			name: "gpustack stays on json for its FunASR backend", provider: "gpustack",
 			model: "SenseVoiceSmall", base: "/v1", wantPath: "/v1/audio/transcriptions",
 			wantFields: map[string]string{"model": "SenseVoiceSmall"},
@@ -132,16 +115,6 @@ func TestTranscriptionWireFormatPerVendor(t *testing.T) {
 			name: "generic stays on json", provider: "generic", model: "whisper-large-v3",
 			base: "/v1", wantPath: "/v1/audio/transcriptions",
 			wantFields: map[string]string{"model": "whisper-large-v3"},
-		},
-		{
-			name: "zhipu glm-asr on the OpenAI shape", provider: "zhipu", model: "glm-asr-2512",
-			base: "/api/paas/v4", wantPath: "/api/paas/v4/audio/transcriptions",
-			wantFields: map[string]string{"model": "glm-asr-2512"},
-		},
-		{
-			name: "minimax on its own path", provider: "minimax", model: "asr-1.0",
-			base: "/v1", wantPath: "/v1/speech_to_text",
-			wantFields: map[string]string{"model": "asr-1.0"},
 		},
 		{
 			name: "openrouter", provider: "openrouter", model: "openai/whisper-large-v3",
@@ -158,16 +131,6 @@ func TestTranscriptionWireFormatPerVendor(t *testing.T) {
 			name: "litellm proxy", provider: "litellm", model: "whisper",
 			base: "/v1", wantPath: "/v1/audio/transcriptions",
 			wantFields: map[string]string{"model": "whisper"},
-		},
-		{
-			name: "aliyun qwen3-asr-flash is served on chat", provider: "aliyun", model: "qwen3-asr-flash",
-			base: "/compatible-mode/v1", wantPath: "/compatible-mode/v1/chat/completions",
-			wantBody: chatAudio("qwen3-asr-flash"),
-		},
-		{
-			name: "mimo asr is served on chat", provider: "mimo", model: "mimo-v2.5-asr",
-			base: "/v1", wantPath: "/v1/chat/completions",
-			wantBody: chatAudio("mimo-v2.5-asr"),
 		},
 	}
 	for _, tc := range cases {
@@ -214,37 +177,6 @@ func TestOversizedAudioIsRefusedBeforeUpload(t *testing.T) {
 	require.NoError(t, err, "the ceiling itself is allowed")
 }
 
-// The chat-served recognisers cap the data URI as sent at 10 MB, prefix
-// included, so three quarters of 10 MB of audio is already too much.
-func TestChatServedCeilingCountsTheWholeDataURI(t *testing.T) {
-	url, _, calls := upstream(t)
-	a, err := NewASR(&Config{
-		Source: types.ModelSourceRemote, Provider: "aliyun", BaseURL: url + "/compatible-mode/v1",
-		ModelName: "qwen3-asr-flash", APIKey: "k",
-	})
-	require.NoError(t, err)
-
-	_, err = a.Transcribe(context.Background(), make([]byte, 10<<20*3/4), "long.wav")
-	require.Error(t, err)
-	assert.Zero(t, calls.Load())
-
-	prefix := len("data:audio/wav;base64,")
-	_, err = a.Transcribe(context.Background(), make([]byte, (10<<20-prefix)/4*3), "fits.wav")
-	require.NoError(t, err)
-}
-
-// Only qwen3-asr-flash takes the audio in the request. Alibaba's other
-// recognition models want a public URL or an asynchronous task, so a row
-// naming one is refused with the reason rather than sent a chat request.
-func TestAlibabaRecognitionModelsOtherThanQwenASRFlashAreRefused(t *testing.T) {
-	_, err := NewASR(&Config{
-		Source: types.ModelSourceRemote, Provider: "aliyun",
-		BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", ModelName: "paraformer-v2", APIKey: "k",
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "public file URL")
-}
-
 // A vendor that does not declare speech recognition is not trusted with it.
 // Azure's Endpoint hook still knows a transcription path, but nobody has
 // verified it; a row that names Azure is refused, and a row that names no
@@ -275,13 +207,13 @@ func TestVendorsWithoutASRAreNotRoutedThroughTheirHooks(t *testing.T) {
 func TestUndocumentedFormatIsRefusedBeforeUpload(t *testing.T) {
 	url, _, calls := upstream(t)
 	a, err := NewASR(&Config{
-		Source: types.ModelSourceRemote, Provider: "zhipu", BaseURL: url + "/api/paas/v4",
-		ModelName: "glm-asr-2512", APIKey: "k",
+		Source: types.ModelSourceRemote, Provider: "openai", BaseURL: url + "/v1",
+		ModelName: "whisper-1", APIKey: "k",
 	})
 	require.NoError(t, err)
-	_, err = a.Transcribe(context.Background(), []byte("x"), "memo.m4a")
+	_, err = a.Transcribe(context.Background(), []byte("x"), "memo.aac")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "wav/mp3")
+	assert.Contains(t, err.Error(), "flac/mp3")
 	assert.Zero(t, calls.Load())
 }
 
@@ -296,15 +228,8 @@ func TestLanguageHintGoesWhereEachVendorDocumentsIt(t *testing.T) {
 			assert.Equal(t, "zh", got.fields["language"])
 			assert.Empty(t, got.language)
 		}},
-		{"minimax header", "minimax", "asr-1.0", "/v1", func(t *testing.T, got *form) {
-			assert.Equal(t, "zh", got.language)
-			assert.NotContains(t, got.fields, "language")
-		}},
-		{"aliyun asr_options", "aliyun", "qwen3-asr-flash", "/compatible-mode/v1", func(t *testing.T, got *form) {
-			assert.Equal(t, map[string]any{"language": "zh"}, got.body["asr_options"])
-		}},
 		{
-			"siliconflow documents none", "siliconflow", "FunAudioLLM/SenseVoiceSmall", "/v1",
+			"litellm documents none", "litellm", "whisper", "/v1",
 			func(t *testing.T, got *form) {
 				assert.NotContains(t, got.fields, "language")
 				assert.Empty(t, got.language)

@@ -15,16 +15,15 @@ import (
 // expectedIDs is every built-in vendor this package links.
 var expectedIDs = []string{
 	"generic", "weknoracloud",
-	"aliyun", "zhipu", "volcengine", "hunyuan", "siliconflow", "deepseek",
-	"minimax", "moonshot", "mimo", "modelscope", "qianfan", "qiniu", "longcat", "lkeap",
+	"deepseek", "lkeap",
 	"openai", "azure_openai", "anthropic", "gemini",
 	"openrouter", "litellm", "requesty",
 	"jina", "nvidia", "novita", "gpustack",
 }
 
 func TestAllVendorsRegistered(t *testing.T) {
-	if len(expectedIDs) != 27 {
-		t.Fatalf("expected 27 vendor ids in the spec, got %d", len(expectedIDs))
+	if len(expectedIDs) != 15 {
+		t.Fatalf("expected 15 vendor ids in the spec, got %d", len(expectedIDs))
 	}
 	for _, id := range expectedIDs {
 		v, ok := modelruntime.Get(id)
@@ -176,9 +175,6 @@ func TestDetectByURLRoundTrip(t *testing.T) {
 	if got := modelruntime.DetectByURL("http://your_gpustack_server_url/v1-openai"); got != "gpustack" {
 		t.Errorf("gpustack placeholder detected as %q", got)
 	}
-	if got := modelruntime.DetectByURL("https://api.moonshot.cn/v1"); got != "moonshot" {
-		t.Errorf("moonshot.cn detected as %q", got)
-	}
 }
 
 // TestOpenAIProtocolSelection pins the first-party / relay split: Responses on
@@ -247,35 +243,12 @@ func TestFamilyExpectations(t *testing.T) {
 	if r := resolve(t, "azure_openai", "gpt-5.1-prod"); !r.ThinkingLevels.Supports(api.ReasoningOff) {
 		t.Error("azure gpt-5* family (GPT-5.1 and later) should allow thinking off")
 	}
-	if r := resolve(t, "aliyun", "qwen3-max"); !r.OpenAICompletions.ThinkingAlwaysSend {
-		t.Error("aliyun/qwen3-max should always send the thinking switch")
-	}
-	if r := resolve(t, "aliyun", "qwen-plus-2026-01-01"); !r.OpenAICompletions.ThinkingAlwaysSend ||
-		!r.OpenAICompletions.ThinkingDisableOnNonStream {
-		t.Error("aliyun qwen-plus* family should carry the hybrid thinking flags")
-	}
-	if r := resolve(t, "aliyun", "qwq-plus"); r.ThinkingLevels.Supports(api.ReasoningOff) {
-		t.Error("aliyun/qwq-plus should not allow thinking off")
-	}
-	if r := resolve(t, "moonshot", "moonshot-v1-8k"); r.OpenAICompletions.FixedTemperature == nil ||
-		*r.OpenAICompletions.FixedTemperature != 1 {
-		t.Error("moonshot/moonshot-v1-8k should pin temperature to 1")
-	}
-	if r := resolve(t, "moonshot", "kimi-k2.6"); r.OpenAICompletions.SupportsTemperature {
-		t.Error("moonshot/kimi-k2.6 should not support temperature")
-	}
 	if r := resolve(t, "lkeap", "deepseek-r1"); r.ThinkingLevels.Supports(api.ReasoningOff) {
 		t.Error("lkeap/deepseek-r1 should not allow thinking off")
 	}
 	if r := resolve(t, "lkeap", "my-deepseek-v3-route"); !r.Spec.Reasoning ||
 		!r.ThinkingLevels.Supports(api.ReasoningOff) {
 		t.Error("lkeap *deepseek-v3* family should be switchable reasoning")
-	}
-	if r := resolve(t, "zhipu", "glm-5.2"); r.ThinkingLevels.Value(api.ReasoningMedium) != "high" {
-		t.Errorf("zhipu/glm-5.2 medium should map to high, got %q", r.ThinkingLevels.Value(api.ReasoningMedium))
-	}
-	if r := resolve(t, "zhipu", "glm-4.7"); r.ThinkingLevels.Value(api.ReasoningOff) != "none" {
-		t.Error("zhipu vendor map should spell off as none")
 	}
 	if r := resolve(t, "gemini", "gemini-2.5-flash"); r.API != api.APIGoogleGenerativeAI {
 		t.Errorf("gemini/gemini-2.5-flash API = %q", r.API)
@@ -298,20 +271,6 @@ func TestFamilyExpectations(t *testing.T) {
 		"anthropic" {
 		t.Error("openrouter anthropic/* family should use anthropic cache_control")
 	}
-	if r := resolve(t, "siliconflow", "deepseek-ai/DeepSeek-V4-Pro"); !r.OpenAICompletions.SupportsReasoningEffort ||
-		r.ThinkingLevels.Value(api.ReasoningMax) != "max" {
-		t.Error("siliconflow DeepSeek-V4-Pro should grade effort high/max")
-	}
-	if r := resolve(t, "siliconflow", "Pro/zai-org/GLM-5"); r.OpenAICompletions.SupportsReasoningEffort {
-		t.Error("siliconflow GLM-5 should not send reasoning_effort")
-	}
-	if r := resolve(t, "minimax", "MiniMax-M3"); r.OpenAICompletions.ThinkingEnabledValue != "adaptive" {
-		t.Error("minimax should enable thinking with type adaptive")
-	}
-	if r := resolve(t, "volcengine", "doubao-seed-1-6-251015"); r.OpenAICompletions.MaxTokensField !=
-		"max_completion_tokens" {
-		t.Error("volcengine must keep max_completion_tokens")
-	}
 	if r := resolve(t, "deepseek", "deepseek-reasoner"); r.ThinkingLevels.Supports(api.ReasoningOff) {
 		t.Error("deepseek/deepseek-reasoner should not allow thinking off")
 	}
@@ -320,12 +279,6 @@ func TestFamilyExpectations(t *testing.T) {
 	if r := resolve(t, "deepseek", "deepseek-v4-pro"); r.OpenAICompletions.AllowsToolChoice("required") ||
 		r.OpenAICompletions.AllowsToolChoice("function") {
 		t.Error("deepseek should not send required or named tool choices")
-	}
-	// GLM-5.2 reads "minimal" as give-up-thinking and folds "low" to high, so
-	// rewriting minimal to low here would send the weakest rung as the
-	// strongest one.
-	if r := resolve(t, "zhipu", "glm-5.2"); r.ThinkingLevels.Value(api.ReasoningMinimal) != "minimal" {
-		t.Errorf("zhipu/glm-5.2 minimal should stay minimal, got %q", r.ThinkingLevels.Value(api.ReasoningMinimal))
 	}
 	// Both entries grade with a top-level reasoning_effort; the vendor
 	// default (chat_template_kwargs) would silently drop the level.
@@ -339,15 +292,6 @@ func TestFamilyExpectations(t *testing.T) {
 	if r := resolve(t, "nvidia", "nvidia/nemotron-3-ultra-550b-a55b"); r.OpenAICompletions.ThinkingFormat !=
 		api.ThinkingFormatChatTemplateKwargs {
 		t.Error("nvidia nemotron should keep the chat-template switch")
-	}
-	// DashScope errors when qwen3.8-max gets both fields.
-	for _, model := range []string{"qwen3.8-max", "qwen3.8-flash", "qwen3.8-plus-2026-09-01"} {
-		if r := resolve(t, "aliyun", model); !r.OpenAICompletions.ThinkingBudgetExcludesEffort {
-			t.Errorf("aliyun/%s should not send thinking_budget next to reasoning_effort", model)
-		}
-	}
-	if r := resolve(t, "aliyun", "qwen3-max"); r.OpenAICompletions.ThinkingBudgetExcludesEffort {
-		t.Error("aliyun/qwen3-max has no effort to conflict with and should keep the budget")
 	}
 }
 
@@ -429,7 +373,7 @@ func TestHooks(t *testing.T) {
 		t.Error("gpustack validate should require a base URL")
 	}
 
-	for _, id := range []string{"volcengine", "lkeap"} {
+	for _, id := range []string{"lkeap"} {
 		v, _ := modelruntime.Get(id)
 		found := false
 		for _, f := range v.ExtraFields {
@@ -446,14 +390,13 @@ func TestHooks(t *testing.T) {
 	}
 }
 
-// TestSignedRerankCredentialLabels pins that the two signed rerank vendors
-// name their first credential after the identity it actually is. The editor
-// renders this instead of a hardcoded vendor table, so losing it silently
-// sends operators back to pasting an sk- key into a signature field.
+// TestSignedRerankCredentialLabels pins that the signed rerank vendor names
+// its first credential after the identity it actually is. The editor renders
+// this instead of a hardcoded vendor table, so losing it silently sends
+// operators back to pasting an sk- key into a signature field.
 func TestSignedRerankCredentialLabels(t *testing.T) {
 	for _, tc := range []struct{ vendor, wantLabel string }{
 		{"lkeap", "SecretId"},
-		{"volcengine", "Access Key ID"},
 	} {
 		t.Run(tc.vendor, func(t *testing.T) {
 			v, ok := modelruntime.Get(tc.vendor)

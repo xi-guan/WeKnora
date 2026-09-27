@@ -47,10 +47,10 @@ func TestValidateRow(t *testing.T) {
 			params:    &types.ModelParameters{Provider: "aliyun"},
 		},
 		{
-			name: "rerank truncation on a vendor without the extension is rejected", modelName: "gte-rerank-v2",
+			name: "rerank truncation on a vendor without the extension is rejected", modelName: "jina-reranker-v3.5",
 			modelType: types.ModelTypeRerank,
 			params: &types.ModelParameters{
-				Provider: "aliyun", ExtraConfig: map[string]string{"truncate_prompt_tokens": "512"},
+				Provider: "jina", ExtraConfig: map[string]string{"truncate_prompt_tokens": "512"},
 			},
 			wantErr: true,
 		},

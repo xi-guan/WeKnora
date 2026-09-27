@@ -59,14 +59,9 @@ func TestEveryRerankVendorResolvesToAKnownProtocol(t *testing.T) {
 // every rerank call for that vendor.
 func TestRerankProtocolAssignment(t *testing.T) {
 	for id, want := range map[string]api.RerankAPI{
-		"aliyun":       api.RerankDashScope,
 		"nvidia":       api.RerankNIM,
 		"lkeap":        api.RerankTencentLKEAP,
-		"volcengine":   api.RerankVolcengineKnowledge,
-		"zhipu":        api.RerankCohere,
 		"jina":         api.RerankCohere,
-		"siliconflow":  api.RerankCohere,
-		"qianfan":      api.RerankCohere,
 		"gpustack":     api.RerankCohere,
 		"generic":      api.RerankCohere,
 		"weknoracloud": api.RerankCohere,
@@ -95,35 +90,13 @@ func TestRerankOutboundShapePerProtocol(t *testing.T) {
 		reply    string
 	}{
 		{
-			name: "cohere shape", provider: "siliconflow", model: "BAAI/bge-reranker-v2-m3",
+			name: "cohere shape", provider: "jina", model: "jina-reranker-v3",
 			reply: `{"results":[{"index":0,"relevance_score":0.5}]}`,
 			assert: func(t *testing.T, path string, body map[string]any) {
 				assert.Equal(t, "/v1/rerank", path)
-				assert.Equal(t, "BAAI/bge-reranker-v2-m3", body["model"])
+				assert.Equal(t, "jina-reranker-v3", body["model"])
 				assert.Equal(t, "q", body["query"])
 				assert.Equal(t, []any{"d0"}, body["documents"])
-			},
-		},
-		{
-			name: "dashscope shape", provider: "aliyun", model: "gte-rerank-v2",
-			reply: `{"output":{"results":[{"index":0,"relevance_score":0.5,"document":{"text":"d0"}}]}}`,
-			assert: func(t *testing.T, _ string, body map[string]any) {
-				input, ok := body["input"].(map[string]any)
-				require.True(t, ok, "DashScope wraps the query and documents in input")
-				assert.Equal(t, "q", input["query"])
-				assert.Contains(t, body, "parameters")
-				assert.NotContains(t, body, "documents", "documents live under input")
-			},
-		},
-		{
-			name: "dashscope shape for qwen3-rerank", provider: "aliyun", model: "qwen3-rerank",
-			reply: `{"output":{"results":[{"index":0,"relevance_score":0.5,"document":{"text":"d0"}}]}}`,
-			assert: func(t *testing.T, path string, body map[string]any) {
-				assert.Equal(t, "/api/v1/services/rerank/text-rerank/text-rerank", path)
-				assert.Equal(t, "qwen3-rerank", body["model"])
-				input, ok := body["input"].(map[string]any)
-				require.True(t, ok, "qwen3-rerank goes out in the native input wrapper")
-				assert.Equal(t, "q", input["query"])
 			},
 		},
 		{
@@ -242,7 +215,7 @@ func TestTruncatePromptTokensOnlyReachesVLLMClassVendors(t *testing.T) {
 		})
 	}
 
-	for _, id := range []string{"jina", "zhipu", "siliconflow", "qianfan", "weknoracloud", "aliyun", "nvidia"} {
+	for _, id := range []string{"jina", "weknoracloud", "nvidia"} {
 		t.Run(id+" rejects it", func(t *testing.T) {
 			_, err := modelruntime.Resolve(modelruntime.Ref{
 				Provider: id, Model: "m", ModelType: types.ModelTypeRerank, Extra: optIn,
@@ -270,21 +243,11 @@ func TestTruncatePromptTokensRejectsAnInvalidValue(t *testing.T) {
 // TestEveryRerankVendorResolvesToAKnownProtocol only checks they are sane.
 func TestRerankCeilingsAreTheDocumentedOnes(t *testing.T) {
 	for id, want := range map[string]api.RerankSettings{
-		// docs.bigmodel.cn: 最多 128 条，query 与单条文档各 4096 字符
-		"zhipu": {MaxDocuments: 128, MaxQueryChars: 4096, MaxDocumentChars: 4096},
 		// cloud.tencent.com/document/product/1772: RunRerank 60 docs,
 		// Query + Docs together 2000 characters, one request at a time.
 		"lkeap": {MaxDocuments: 60, MaxRequestChars: 2000, MaxConcurrency: 1},
-		// VikingDB Knowledge Service rerank: datas "数组长度不超过 200".
-		"volcengine": {MaxDocuments: 200, MaxConcurrency: 4},
 		// NIM reranking: passages is capped at 512 items.
 		"nvidia": {MaxDocuments: 512},
-		// cloud.baidu.com/doc/qianfan-api: 文本数量不超过64, query 不超过
-		// 1600 个字符, 每条 document 不超过 4096 个字符.
-		"qianfan": {MaxDocuments: 64, MaxQueryChars: 1600, MaxDocumentChars: 4096},
-		// help.aliyun.com text-rerank: 500 documents per request. Its length
-		// limits are stated in tokens, which runes cannot express.
-		"aliyun": {MaxDocuments: 500},
 	} {
 		t.Run(id, func(t *testing.T) {
 			resolved, err := modelruntime.Resolve(modelruntime.Ref{
@@ -373,31 +336,6 @@ func TestRerankScoreScalesMatchTheVendorDocs(t *testing.T) {
 			want = api.ScoreLogit
 		}
 		assert.Equal(t, want, resolved.Rerank.ScoreScale, "%s score scale", v.ID)
-	}
-}
-
-// TestQwen3RerankUsesNativeDashScopeProtocol keeps qwen3-rerank on the
-// native text-rerank endpoint. Alibaba also documents a flat
-// /compatible-api/v1/reranks shape for it, but the native endpoint serves the
-// same model with identical scores (#3558), and v0.8.0 deployments already
-// have rows that name it — refusing it would break them on upgrade.
-func TestQwen3RerankUsesNativeDashScopeProtocol(t *testing.T) {
-	v, ok := modelruntime.Get("aliyun")
-	require.True(t, ok)
-
-	offered := make([]string, 0)
-	for _, m := range v.ModelsByType(types.ModelTypeRerank) {
-		offered = append(offered, m.ID)
-	}
-	assert.Contains(t, offered, "qwen3-rerank")
-	assert.Contains(t, offered, "gte-rerank-v2")
-
-	for _, model := range []string{"qwen3-rerank", "gte-rerank-v2"} {
-		resolved, err := modelruntime.Resolve(modelruntime.Ref{
-			Provider: "aliyun", Model: model, ModelType: types.ModelTypeRerank,
-		})
-		require.NoError(t, err, model)
-		assert.Equal(t, api.RerankDashScope, resolved.RerankAPI, model)
 	}
 }
 
