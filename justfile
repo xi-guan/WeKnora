@@ -12,11 +12,11 @@ _default:
 pull:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "→ syncing fork with upstream"
-    gh repo sync xi-guan/WeKnora
-    echo "→ pulling from origin with rebase"
-    git pull --rebase --autostash origin main
-    echo "✓ pull complete"
+    echo "→ fetching upstream"
+    git fetch upstream
+    echo "→ rebasing local commits onto upstream/main"
+    git rebase --autostash upstream/main
+    echo "✓ pull complete; publish with: git push --force-with-lease origin main"
 
 # prepare .env and install go/frontend dependencies
 setup:
