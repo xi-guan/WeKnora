@@ -1,0 +1,10 @@
+# deployment tweaks, kept out of docker-compose.yml so upstream syncs stay clean.
+# compose reads this file automatically; no -f flag needed.
+# the host-side port stays in .env (APP_PORT / FRONTEND_PORT).
+services:
+  app:
+    volumes:
+      - ./config/builtin_models.yaml:/app/config/builtin_models.yaml:ro
+
+  redis:
+    image: redis:8-alpine
