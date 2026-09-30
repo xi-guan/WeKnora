@@ -14,6 +14,10 @@ builtin_models:
       base_url: http://host.docker.internal:8200/v1
       api_key: ${OMLX_API_KEY}
       provider: openai
+      supports_vision: true
+      # measured here: 4 sustains ~151 tok/s, 6 costs 28% latency for 17% throughput
+      # the vlm entry shares this server and the cap is per model id, so 3 + 1 = 4
+      max_concurrency: 3
 
   - id: builtin-omlx-chat-27b
     name: Qwen3.8-27B-oQ4e-mtp
@@ -24,6 +28,23 @@ builtin_models:
       base_url: http://host.docker.internal:8200/v1
       api_key: ${OMLX_API_KEY}
       provider: openai
+      supports_vision: true
+      max_concurrency: 2
+
+  # same weights as builtin-omlx-chat, registered under VLLM so a knowledge base has a vlm to pick
+  # captioning still has to be switched on per knowledge base; registering alone does nothing
+  - id: builtin-omlx-vlm
+    name: Qwen3.6-35B-A3B-oQ4e-mtp
+    type: VLLM
+    source: remote
+    is_default: true
+    description: local omlx vision model (MoE, 262k ctx)
+    parameters:
+      base_url: http://host.docker.internal:8200/v1
+      api_key: ${OMLX_API_KEY}
+      provider: openai
+      supports_vision: true
+      max_concurrency: 1
 
   - id: builtin-omlx-embedding
     name: bge-m3-mlx-8bit
