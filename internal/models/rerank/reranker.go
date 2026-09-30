@@ -10,6 +10,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/api"
 	"github.com/Tencent/WeKnora/internal/models/api/cohererank"
+	"github.com/Tencent/WeKnora/internal/models/api/dashscoperank"
 	"github.com/Tencent/WeKnora/internal/models/api/nimrerank"
 	modelruntime "github.com/Tencent/WeKnora/internal/models/runtime"
 
@@ -196,10 +197,14 @@ func newReranker(config *RerankerConfig) (Reranker, error) {
 	switch resolved.RerankAPI {
 	case api.RerankCohere:
 		client = cohererank.New(cohererank.Config{Endpoint: endpoint, Settings: resolved.Rerank})
+	case api.RerankDashScope:
+		client = dashscoperank.New(dashscoperank.Config{Endpoint: endpoint, Settings: resolved.Rerank})
 	case api.RerankNIM:
 		client = nimrerank.New(nimrerank.Config{Endpoint: endpoint, Settings: resolved.Rerank})
 	case api.RerankTencentLKEAP:
 		client, err = newLKEAPClient(config, resolved)
+	case api.RerankVolcengineKnowledge:
+		client, err = newVolcengineClient(config, resolved)
 	default:
 		return nil, fmt.Errorf("unsupported rerank api %q for provider %s", resolved.RerankAPI, vendor.ID)
 	}

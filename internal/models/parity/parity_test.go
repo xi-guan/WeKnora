@@ -126,10 +126,56 @@ func TestLegacyWireParity(t *testing.T) {
 			opts: &api.Options{MaxTokens: 100},
 			want: map[string]any{"max_tokens": float64(100), "max_completion_tokens": nil},
 		},
-		// The two vendors below moved the other way: the old table left them
+		{
+			name: "zhipu keeps max_tokens", provider: "zhipu", model: "glm-4.7",
+			opts: &api.Options{MaxTokens: 100},
+			want: map[string]any{"max_tokens": float64(100), "max_completion_tokens": nil},
+		},
+		{
+			name: "siliconflow keeps max_tokens", provider: "siliconflow", model: "deepseek-ai/DeepSeek-V4-Pro",
+			opts: &api.Options{MaxTokens: 100},
+			want: map[string]any{"max_tokens": float64(100), "max_completion_tokens": nil},
+		},
+		{
+			name: "moonshot moved to max_completion_tokens", provider: "moonshot", model: "kimi-k2.6",
+			opts: &api.Options{MaxTokens: 100},
+			want: map[string]any{"max_completion_tokens": float64(100), "max_tokens": nil},
+			divergence: "the old table sent max_tokens. platform.kimi.com now documents " +
+				"max_completion_tokens as the field and max_tokens as deprecated, so the vendor " +
+				"audit switched it; both are still accepted upstream.",
+		},
+		// The six vendors below moved the other way: the old table left them
 		// on the default max_completion_tokens and the audit put them on
 		// max_tokens. Each entry carries the documentation that decided it, so
 		// a later flip back is a visible change rather than a silent one.
+		{
+			name: "hunyuan moved to max_tokens", provider: "hunyuan", model: "hunyuan-turbos-latest",
+			opts: &api.Options{MaxTokens: 100},
+			want: map[string]any{"max_tokens": float64(100), "max_completion_tokens": nil},
+			divergence: "the OpenAI-compatible reference documents only max_tokens (default 4096); " +
+				"max_completion_tokens appears nowhere in it.",
+		},
+		{
+			name: "modelscope moved to max_tokens", provider: "modelscope", model: "ZhipuAI/GLM-4.6",
+			opts: &api.Options{MaxTokens: 100},
+			want: map[string]any{"max_tokens": float64(100), "max_completion_tokens": nil},
+			divergence: "ModelScope API-Inference documents no output-cap parameter at all. " +
+				"max_tokens is carried over from the DashScope/Bailian channel behind it and is " +
+				"marked unverified in the vendor package, so this case pins a guess, not a fact.",
+		},
+		{
+			name: "qiniu moved to max_tokens", provider: "qiniu", model: "qwen3.5-397b-a17b",
+			opts:       &api.Options{MaxTokens: 100},
+			want:       map[string]any{"max_tokens": float64(100), "max_completion_tokens": nil},
+			divergence: "max_completion_tokens is not in the Qiniu reference.",
+		},
+		{
+			name: "longcat moved to max_tokens", provider: "longcat", model: "LongCat-2.0",
+			opts: &api.Options{MaxTokens: 100},
+			want: map[string]any{"max_tokens": float64(100), "max_completion_tokens": nil},
+			divergence: "max_completion_tokens is not part of the LongCat reference; max_tokens " +
+				"defaults to and tops out at the model's 131072 output budget.",
+		},
 		{
 			name: "requesty moved to max_tokens", provider: "requesty", model: "anthropic/claude-opus-5",
 			opts:       &api.Options{MaxTokens: 100},
@@ -183,6 +229,23 @@ func TestLegacyWireParity(t *testing.T) {
 			want: map[string]any{"max_tokens": float64(100), "max_completion_tokens": nil},
 		},
 		{
+			name: "volcengine keeps max_completion_tokens", provider: "volcengine", model: "doubao-seed-1-6-251015",
+			opts: &api.Options{MaxTokens: 100},
+			want: map[string]any{"max_completion_tokens": float64(100), "max_tokens": nil},
+		},
+		{
+			// Not a divergence: the pre-catalog table left DashScope on the
+			// default too. The audit briefly moved it to max_tokens because
+			// the compatible mode has always accepted that field; it was
+			// moved back because DashScope's parameter table marks
+			// max_tokens 即将废弃 and names max_completion_tokens its
+			// successor, and following a vendor that has announced a
+			// replacement is the cheaper side of the bet.
+			name: "aliyun keeps max_completion_tokens", provider: "aliyun", model: "qwen3-max",
+			opts: &api.Options{MaxTokens: 100},
+			want: map[string]any{"max_completion_tokens": float64(100), "max_tokens": nil},
+		},
+		{
 			name: "litellm keeps max_completion_tokens", provider: "litellm", model: "gpt-4o",
 			baseURL: "http://127.0.0.1:9/v1",
 			opts:    &api.Options{MaxTokens: 100},
@@ -207,6 +270,31 @@ func TestLegacyWireParity(t *testing.T) {
 
 		// ---- thinking encodings (old ThinkingStrategy table) ----
 		{
+			name:     "aliyun qwen thinking model always pins enable_thinking, off in non-stream",
+			provider: "aliyun", model: "qwen3-max",
+			opts:   &api.Options{Thinking: ptrBool(true)},
+			stream: false,
+			want:   map[string]any{"enable_thinking": false},
+		},
+		{
+			name:     "aliyun qwen thinking model streams with enable_thinking true",
+			provider: "aliyun", model: "qwen3-max",
+			opts:   &api.Options{Thinking: ptrBool(true)},
+			stream: true,
+			want:   map[string]any{"enable_thinking": true},
+		},
+		{
+			name:     "aliyun sends the switch even without a caller preference",
+			provider: "aliyun", model: "qwen3-max",
+			opts: &api.Options{Temperature: 0.2},
+			want: map[string]any{"enable_thinking": false},
+		},
+		{
+			name: "volcengine uses thinking.type", provider: "volcengine", model: "doubao-seed-1-6-251015",
+			opts: &api.Options{Thinking: ptrBool(true)},
+			want: map[string]any{"thinking": map[string]any{"type": "enabled"}},
+		},
+		{
 			name: "lkeap deepseek v3 uses thinking.type", provider: "lkeap", model: "deepseek-v3.2",
 			opts: &api.Options{Thinking: ptrBool(true)},
 			want: map[string]any{"thinking": map[string]any{"type": "enabled"}},
@@ -228,6 +316,12 @@ func TestLegacyWireParity(t *testing.T) {
 			want: map[string]any{"chat_template_kwargs": map[string]any{"enable_thinking": true}},
 		},
 		{
+			name:     "moonshot v1 pins temperature to 1 and drops other sampling",
+			provider: "moonshot", model: "moonshot-v1-8k",
+			opts: &api.Options{Temperature: 0.2, TopP: 0.9},
+			want: map[string]any{"temperature": 1.0, "top_p": nil},
+		},
+		{
 			// deepseek-chat is catalogued as non-reasoning, so this also pins the
 			// precedence rule: an explicit legacy override outranks that gate.
 			name:     "legacy extra_config.thinking_control still overrides the vendor default",
@@ -240,7 +334,7 @@ func TestLegacyWireParity(t *testing.T) {
 		},
 		{
 			name:     "legacy extra_config.thinking_control=none silences thinking",
-			provider: "lkeap", model: "deepseek-v3.2",
+			provider: "volcengine", model: "doubao-seed-1-6-251015",
 			extra: map[string]string{models.ExtraThinkingControl: "none"},
 			opts:  &api.Options{Thinking: ptrBool(true)},
 			want:  map[string]any{"thinking": nil, "reasoning_effort": nil},
@@ -271,6 +365,12 @@ func TestLegacyWireParity(t *testing.T) {
 			divergence: "old code had no thinking strategy for DeepSeek, so an agent with thinking off " +
 				"still got the vendor default (thinking on). The vendor documents thinking.type, so the " +
 				"user's setting is now honoured.",
+		},
+		{
+			name: "zhipu now honours thinking=false", provider: "zhipu", model: "glm-4.7",
+			opts:       &api.Options{Thinking: ptrBool(false)},
+			want:       map[string]any{"thinking": map[string]any{"type": "disabled"}},
+			divergence: "same as DeepSeek: GLM documents thinking.type and the old code sent nothing.",
 		},
 		{
 			name:     "openai first-party now uses the Responses protocol",
@@ -314,20 +414,32 @@ func TestLegacyWireParity(t *testing.T) {
 // to the same vendor as before.
 func TestLegacyProviderDetection(t *testing.T) {
 	cases := map[string]string{
-		"https://openrouter.ai/api/v1":                     "openrouter",
-		"https://router.requesty.ai/v1":                    "requesty",
-		"https://api.jina.ai/v1":                           "jina",
-		"https://my-resource.openai.azure.com":             "azure_openai",
-		"https://api.openai.com/v1":                        "openai",
-		"https://api.anthropic.com/v1":                     "anthropic",
-		"https://api.deepseek.com/v1":                      "deepseek",
-		"https://generativelanguage.googleapis.com/v1beta": "gemini",
-		"https://api.lkeap.cloud.tencent.com/v1":           "lkeap",
-		"https://integrate.api.nvidia.com/v1":              "nvidia",
-		"https://api.novita.ai/openai/v1":                  "novita",
-		"https://weknora.weixin.qq.com":                    "weknoracloud",
-		"http://localhost:8000/v1":                         "generic",
-		"":                                                 "generic",
+		"https://dashscope.aliyuncs.com/compatible-mode/v1": "aliyun",
+		"https://open.bigmodel.cn/api/paas/v4":              "zhipu",
+		"https://openrouter.ai/api/v1":                      "openrouter",
+		"https://router.requesty.ai/v1":                     "requesty",
+		"https://api.siliconflow.cn/v1":                     "siliconflow",
+		"https://api.jina.ai/v1":                            "jina",
+		"https://my-resource.openai.azure.com":              "azure_openai",
+		"https://api.openai.com/v1":                         "openai",
+		"https://api.anthropic.com/v1":                      "anthropic",
+		"https://api.deepseek.com/v1":                       "deepseek",
+		"https://generativelanguage.googleapis.com/v1beta":  "gemini",
+		"https://ark.cn-beijing.volces.com/api/v3":          "volcengine",
+		"https://api.hunyuan.cloud.tencent.com/v1":          "hunyuan",
+		"https://api.minimaxi.com/v1":                       "minimax",
+		"https://api.xiaomimimo.com/v1":                     "mimo",
+		"https://api-inference.modelscope.cn/v1":            "modelscope",
+		"https://api.qnaigc.com/v1":                         "qiniu",
+		"https://api.moonshot.ai/v1":                        "moonshot",
+		"https://qianfan.baidubce.com/v2":                   "qianfan",
+		"https://api.longcat.chat/openai/v1":                "longcat",
+		"https://api.lkeap.cloud.tencent.com/v1":            "lkeap",
+		"https://integrate.api.nvidia.com/v1":               "nvidia",
+		"https://api.novita.ai/openai/v1":                   "novita",
+		"https://weknora.weixin.qq.com":                     "weknoracloud",
+		"http://localhost:8000/v1":                          "generic",
+		"":                                                  "generic",
 	}
 	for url, want := range cases {
 		assert.Equal(t, want, modelruntime.DetectByURL(url), "DetectByURL(%q)", url)

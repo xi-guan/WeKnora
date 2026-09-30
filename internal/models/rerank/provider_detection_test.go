@@ -12,12 +12,15 @@ import (
 //
 // modelruntime.DetectByURL returns "generic" for every URL while the catalog is
 // empty. Without the vendor packages linked in, a stored rerank row that
-// carries no provider id resolves to the generic Cohere client, and LKEAP
-// loses its signed SDK client.
+// carries no provider id resolves to the generic Cohere client: LKEAP and
+// Volcengine lose their signed SDK clients and Aliyun its native protocol.
 func TestDetectByURLSeesVendorCatalog(t *testing.T) {
 	cases := map[string]string{
 		"https://api.lkeap.cloud.tencent.com/v1":               "lkeap",
+		"https://api-knowledgebase.mlp.cn-beijing.volces.com":  "volcengine",
 		"https://api.jina.ai/v1":                               "jina",
+		"https://open.bigmodel.cn/api/paas/v4":                 "zhipu",
+		"https://dashscope.aliyuncs.com/compatible-mode/v1":    "aliyun",
 		"https://some-self-hosted-gateway.example.internal/v1": providers.GenericID,
 	}
 	for baseURL, want := range cases {

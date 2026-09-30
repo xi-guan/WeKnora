@@ -124,6 +124,28 @@ func TestEmbeddingWireFormatPerVendor(t *testing.T) {
 		}
 		return body
 	}
+	arkBody := func(model, text string, extra map[string]any) map[string]any {
+		body := map[string]any{
+			"model": model,
+			"input": []any{map[string]any{"type": "text", "text": text}},
+		}
+		for k, v := range extra {
+			body[k] = v
+		}
+		return body
+	}
+	dashBody := func(model string, input []string, extra map[string]any) map[string]any {
+		contents := make([]any, len(input))
+		for i, s := range input {
+			contents[i] = map[string]any{"text": s}
+		}
+		body := map[string]any{"model": model, "input": map[string]any{"contents": contents}}
+		for k, v := range extra {
+			body[k] = v
+		}
+		return body
+	}
+	const dashPath = "/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding"
 
 	cases := []struct {
 		name     string
@@ -187,6 +209,18 @@ func TestEmbeddingWireFormatPerVendor(t *testing.T) {
 			}),
 		},
 		{
+			name: "zhipu documents no encoding_format", provider: "zhipu",
+			model: "embedding-3", base: "/api/paas/v4", override: true, truncate: 300,
+			wantPath: "/api/paas/v4/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("embedding-3", three, map[string]any{"dimensions": float64(256)}),
+		},
+		{
+			name: "zhipu embedding-2 is fixed at 1024", provider: "zhipu",
+			model: "embedding-2", base: "/api/paas/v4", override: true,
+			wantPath: "/api/paas/v4/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("embedding-2", three, nil),
+		},
+		{
 			name: "jina truncates as it always has and sends no task", provider: "jina",
 			model: "jina-embeddings-v3", base: "/v1", override: true,
 			wantPath: "/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
@@ -210,10 +244,48 @@ func TestEmbeddingWireFormatPerVendor(t *testing.T) {
 			}),
 		},
 		{
+			name: "hunyuan takes model and input only", provider: "hunyuan",
+			model: "hunyuan-embedding", base: "/v1", override: true, truncate: 300,
+			wantPath: "/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("hunyuan-embedding", three, nil),
+		},
+		{
+			name: "modelscope documents nothing beyond the baseline", provider: "modelscope",
+			model: "Qwen/Qwen3-Embedding-8B", base: "/v1", override: true,
+			wantPath: "/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("Qwen/Qwen3-Embedding-8B", three, nil),
+		},
+		{
 			name: "novita documents encoding_format only", provider: "novita",
 			model: "baai/bge-m3", base: "/openai/v1", override: true,
 			wantPath: "/openai/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
 			wantBody: openAIBody("baai/bge-m3", three, map[string]any{"encoding_format": "float"}),
+		},
+		{
+			name: "siliconflow narrows only the Qwen3 series", provider: "siliconflow",
+			model: "Qwen/Qwen3-Embedding-8B", base: "/v1", override: true,
+			wantPath: "/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("Qwen/Qwen3-Embedding-8B", three,
+				map[string]any{"encoding_format": "float", "dimensions": float64(256)}),
+		},
+		{
+			name: "siliconflow bge-m3 has a fixed width", provider: "siliconflow",
+			model: "BAAI/bge-m3", base: "/v1", override: true,
+			wantPath: "/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("BAAI/bge-m3", three, map[string]any{"encoding_format": "float"}),
+		},
+		{
+			name: "siliconflow takes up to thirty-two texts", provider: "siliconflow",
+			model: "BAAI/bge-m3", base: "/v1", texts: texts(33), wantRequests: 2,
+			wantPath: "/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("BAAI/bge-m3", texts(32), map[string]any{"encoding_format": "float"}),
+		},
+		{
+			name: "aliyun text-embedding-v2 has a fixed width and takes 25", provider: "aliyun",
+			model: "text-embedding-v2", base: "/compatible-mode/v1", override: true,
+			texts: texts(26), wantRequests: 2,
+			wantPath: "/compatible-mode/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("text-embedding-v2", texts(25), map[string]any{"encoding_format": "float"}),
 		},
 		{
 			name: "openrouter", provider: "openrouter",
@@ -221,6 +293,84 @@ func TestEmbeddingWireFormatPerVendor(t *testing.T) {
 			wantPath: "/api/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
 			wantBody: openAIBody("openai/text-embedding-3-small", three,
 				map[string]any{"encoding_format": "float", "dimensions": float64(256)}),
+		},
+		{
+			name: "qianfan takes up to sixteen texts", provider: "qianfan",
+			model: "embedding-v1", base: "/v2", texts: texts(17), wantRequests: 2,
+			wantPath: "/v2/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("embedding-v1", texts(16), map[string]any{"encoding_format": "float"}),
+		},
+		{
+			name: "qianfan tao-8k takes one text", provider: "qianfan",
+			model: "tao-8k", base: "/v2", wantRequests: 3,
+			wantPath: "/v2/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("tao-8k", []string{"a"}, map[string]any{"encoding_format": "float"}),
+		},
+		{
+			name: "aliyun text models use the compatible endpoint", provider: "aliyun",
+			model: "text-embedding-v4", base: "/compatible-mode/v1", override: true,
+			texts: texts(12), wantRequests: 2,
+			wantPath: "/compatible-mode/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("text-embedding-v4", texts(10),
+				map[string]any{"encoding_format": "float", "dimensions": float64(256)}),
+		},
+		{
+			name: "aliyun text models from a bare host", provider: "aliyun",
+			model:    "text-embedding-v4",
+			wantPath: "/compatible-mode/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("text-embedding-v4", three, map[string]any{"encoding_format": "float"}),
+		},
+		{
+			name: "aliyun text model not yet in the catalog", provider: "aliyun",
+			model: "qwen3.8-text-embedding", base: "/compatible-mode/v1",
+			wantPath: "/compatible-mode/v1/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: openAIBody("qwen3.8-text-embedding", three, map[string]any{"encoding_format": "float"}),
+		},
+		{
+			name: "aliyun vision plus uses the native API at a fixed width", provider: "aliyun",
+			model: "tongyi-embedding-vision-plus", base: "/compatible-mode/v1", override: true,
+			wantPath: dashPath, wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: dashBody("tongyi-embedding-vision-plus", three, nil),
+		},
+		{
+			name: "aliyun qwen3-vl-embedding narrows under parameters", provider: "aliyun",
+			model: "qwen3-vl-embedding", base: "/compatible-mode/v1", override: true,
+			wantPath: dashPath, wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: dashBody("qwen3-vl-embedding", three,
+				map[string]any{"parameters": map[string]any{"dimension": float64(256)}}),
+		},
+		{
+			name: "aliyun qwen2.5-vl-embedding fuses, so one text per request", provider: "aliyun",
+			model: "qwen2.5-vl-embedding", base: "/compatible-mode/v1", wantRequests: 3,
+			wantPath: dashPath, wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: dashBody("qwen2.5-vl-embedding", []string{"a"}, nil),
+		},
+		{
+			name: "volcengine fuses, so one text per request", provider: "volcengine",
+			model: "doubao-embedding-vision-251215", base: "/api/v3/embeddings/multimodal",
+			override: true, wantRequests: 3,
+			wantPath: "/api/v3/embeddings/multimodal", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: arkBody("doubao-embedding-vision-251215", "a",
+				map[string]any{"encoding_format": "float", "dimensions": float64(256)}),
+		},
+		{
+			name: "volcengine from the chat base URL", provider: "volcengine",
+			model: "doubao-embedding-vision-251215", base: "/api/v3", wantRequests: 3,
+			wantPath: "/api/v3/embeddings/multimodal", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: arkBody("doubao-embedding-vision-251215", "a", map[string]any{"encoding_format": "float"}),
+		},
+		{
+			name: "volcengine from a bare host", provider: "volcengine",
+			model: "doubao-embedding-vision-251215", wantRequests: 3,
+			wantPath: "/api/v3/embeddings/multimodal", wantAuth: [2]string{"Authorization", "Bearer k"},
+			wantBody: arkBody("doubao-embedding-vision-251215", "a", map[string]any{"encoding_format": "float"}),
+		},
+		{
+			name: "volcengine retired text models keep their own endpoint", provider: "volcengine",
+			model: "doubao-embedding-text-240715", base: "/api/v3/embeddings/multimodal", override: true,
+			wantPath: "/api/v3/embeddings", wantAuth: [2]string{"Authorization", "Bearer k"},
+			// The archived reference lists encoding_format too, and no dimensions.
+			wantBody: openAIBody("doubao-embedding-text-240715", three, map[string]any{"encoding_format": "float"}),
 		},
 		{
 			name: "gemini posts to the native method", provider: "gemini",

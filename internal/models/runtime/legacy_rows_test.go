@@ -15,13 +15,14 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
-// legacyProviderIDs is the set of parameters.provider values the pre-catalog
-// code could write that this fork still ships. The China-only vendors were
-// dropped deliberately, so rows carrying them degrade to generic by design.
+// legacyProviderIDs is the complete set of parameters.provider values the
+// pre-catalog code could write: provider.AllProviders() plus weknoracloud,
+// as of internal/models/provider/provider.go before the refactor.
 var legacyProviderIDs = []string{
-	"generic", "weknoracloud", "deepseek",
-	"openai", "anthropic", "gemini", "openrouter", "litellm",
-	"requesty", "jina", "lkeap", "gpustack", "nvidia",
+	"generic", "weknoracloud", "aliyun", "zhipu", "volcengine", "hunyuan",
+	"siliconflow", "deepseek", "minimax", "moonshot", "modelscope", "qianfan",
+	"qiniu", "openai", "anthropic", "gemini", "openrouter", "litellm",
+	"requesty", "jina", "mimo", "longcat", "lkeap", "gpustack", "nvidia",
 	"novita", "azure_openai",
 }
 

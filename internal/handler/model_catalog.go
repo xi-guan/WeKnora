@@ -212,6 +212,7 @@ func (h *ModelHandler) ListModelProviders(c *gin.Context) {
 	} else {
 		vendors = modelruntime.List()
 	}
+	vendors = visibleVendors(vendors)
 	// Default base URLs are the editor's prefill, and only a caller who may
 	// configure integrations can use them. A deployment overlay may also
 	// repoint a vendor at an internal gateway, which would otherwise reach

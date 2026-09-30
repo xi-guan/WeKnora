@@ -2172,9 +2172,9 @@ func (h *InitializationHandler) CheckRerankModel(c *gin.Context) {
 	}
 
 	model := h.buildTestModel(&req, types.ModelTypeRerank, types.ModelSourceRemote)
-	// LKEAP rerank signs with a key pair stored on the row itself, not with
-	// the tenant's WeKnora Cloud credentials.
-	if model.Parameters.Provider == providers.LkeapID {
+	// LKEAP and Volcengine rerank sign with a key pair stored on the row
+	// itself, not with the tenant's WeKnora Cloud credentials.
+	if p := model.Parameters.Provider; p == providers.LkeapID || p == providers.VolcengineID {
 		appID = ""
 		appSecret = decryptModelAppSecret(model.Parameters.AppSecret)
 	}

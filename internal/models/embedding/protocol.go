@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/models/api"
+	"github.com/Tencent/WeKnora/internal/models/api/arkembeddings"
+	"github.com/Tencent/WeKnora/internal/models/api/dashscopeembeddings"
 	"github.com/Tencent/WeKnora/internal/models/api/googleembeddings"
 	"github.com/Tencent/WeKnora/internal/models/api/openaiembeddings"
 	modelruntime "github.com/Tencent/WeKnora/internal/models/runtime"
@@ -71,6 +73,14 @@ func newRemoteEmbedder(config Config, pooler EmbedderPooler) (Embedder, error) {
 	switch resolved.EmbeddingAPI {
 	case api.EmbeddingOpenAI:
 		client = openaiembeddings.New(openaiembeddings.Config{
+			Endpoint: endpoint, Settings: settings, Dimensions: dimensions, Retry: retry,
+		})
+	case api.EmbeddingDashScope:
+		client = dashscopeembeddings.New(dashscopeembeddings.Config{
+			Endpoint: endpoint, Settings: settings, Dimensions: dimensions, Retry: retry,
+		})
+	case api.EmbeddingArk:
+		client = arkembeddings.New(arkembeddings.Config{
 			Endpoint: endpoint, Settings: settings, Dimensions: dimensions, Retry: retry,
 		})
 	case api.EmbeddingGoogle:
