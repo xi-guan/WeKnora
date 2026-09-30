@@ -4,6 +4,10 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # override for cross-arch builds: just DOCKER_DEFAULT_PLATFORM=linux/amd64 start
 export DOCKER_DEFAULT_PLATFORM := "linux/" + if arch() == "aarch64" { "arm64" } else { "amd64" }
 
+# force the docker-driver builder: a docker-container builder leaves freshly
+# built images dangling, so compose silently runs the stale wechatopenai tag
+export BUILDX_BUILDER := "default"
+
 [private]
 _default:
     @just --list --unsorted --list-heading '' --list-prefix='- '
