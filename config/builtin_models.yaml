@@ -1,7 +1,7 @@
 # local omlx (OpenAI-compatible) models.
-# base_url uses host.docker.internal because the app runs inside docker
-# while omlx listens on the host. api_key comes from .env (OMLX_API_KEY).
-# requires SSRF_WHITELIST=host.docker.internal in .env.
+# base_url and api_key come from .env: OMLX_BASE_URL and OMLX_API_KEY.
+# ${VAR} takes no default here, so an unset OMLX_BASE_URL breaks every entry below.
+# pointing it at the docker host needs SSRF_WHITELIST=host.docker.internal in .env.
 
 builtin_models:
   - id: builtin-omlx-chat
@@ -11,7 +11,7 @@ builtin_models:
     is_default: true
     description: local omlx chat model (MoE, 262k ctx)
     parameters:
-      base_url: http://host.docker.internal:8200/v1
+      base_url: ${OMLX_BASE_URL}
       api_key: ${OMLX_API_KEY}
       provider: openai
       supports_vision: true
@@ -25,7 +25,7 @@ builtin_models:
     source: remote
     description: local omlx chat model (27B, 262k ctx)
     parameters:
-      base_url: http://host.docker.internal:8200/v1
+      base_url: ${OMLX_BASE_URL}
       api_key: ${OMLX_API_KEY}
       provider: openai
       supports_vision: true
@@ -40,7 +40,7 @@ builtin_models:
     is_default: true
     description: local omlx vision model (MoE, 262k ctx)
     parameters:
-      base_url: http://host.docker.internal:8200/v1
+      base_url: ${OMLX_BASE_URL}
       api_key: ${OMLX_API_KEY}
       provider: openai
       supports_vision: true
@@ -53,7 +53,7 @@ builtin_models:
     is_default: true
     description: local omlx embedding (1024-dim, 8k ctx)
     parameters:
-      base_url: http://host.docker.internal:8200/v1
+      base_url: ${OMLX_BASE_URL}
       api_key: ${OMLX_API_KEY}
       provider: openai
       embedding_parameters:
@@ -66,6 +66,6 @@ builtin_models:
     source: remote
     description: local omlx reranker via POST {base_url}/rerank
     parameters:
-      base_url: http://host.docker.internal:8200/v1
+      base_url: ${OMLX_BASE_URL}
       api_key: ${OMLX_API_KEY}
       provider: generic
